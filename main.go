@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -42,7 +43,26 @@ type Repository struct {
 	DefaultBranch   string      `json:"default_branch"`
 }
 
+type SortFunc func(*Repository, *Repository) bool
+
 func main() {
+	sortFlag := flag.String("sort", "watchers", "Sort by: watchers, stars, forks, issues")
+	flag.Parse()
+
+	var sortFunc SortFunc
+	switch *sortFlag {
+	case "watchers":
+		sortFunc = func(a, b *Repository) bool { return a.WatchersCount < b.WatchersCount }
+	case "stars":
+		sortFunc = func(a, b *Repository) bool { return a.StargazersCount < b.StargazersCount }
+	case "forks":
+		sortFunc = func(a, b *Repository) bool { return a.ForksCount < b.ForksCount }
+	case "issues":
+		sortFunc = func(a, b *Repository) bool { return a.OpenIssuesCount < b.OpenIssuesCount }
+	default:
+		log.Fatalf("Invalid sort option: %s", *sortFlag)
+	}
+
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		fmt.Println("GitHub token not found, exiting...")
@@ -84,7 +104,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		repoList := sortRepos(repoInfo)
+		repoList := sortRepos(repoInfo, sortFunc)
 		printRepos(repoList, w)
 	}()
 
@@ -165,14 +185,14 @@ func fetchRepoInfo(repos <-chan string, token string) <-chan *Repository {
 	return out
 }
 
-func sortRepos(repos <-chan *Repository) []Repository {
+func sortRepos(repos <-chan *Repository, sortFunc SortFunc) []Repository {
 	var repoList []Repository
 	for repo := range repos {
 		repoList = append(repoList, *repo)
 	}
 
 	sort.Slice(repoList, func(i, j int) bool {
-		return repoList[i].WatchersCount < repoList[j].WatchersCount
+		return sortFunc(&repoList[i], &repoList[j])
 	})
 
 	return repoList
