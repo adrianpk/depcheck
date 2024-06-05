@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"text/tabwriter"
 )
 
@@ -40,62 +41,6 @@ type Repository struct {
 	DefaultBranch   string      `json:"default_branch"`
 }
 
-func fetchRepoInfo(repo string, token string, w *tabwriter.Writer) (*Repository, error) {
-	parts := strings.Split(repo, "/")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid repo format: %s", repo)
-	}
-
-	repo = fmt.Sprintf("%s/%s", parts[len(parts)-2], parts[len(parts)-1])
-
-	url := fmt.Sprintf("https://api.github.com/repos/%s", repo)
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request for repo %s: %w", repo, err)
-	}
-
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making request for repo %s: %w", repo, err)
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("received non-200 response from GitHub API for repo %s: %d", repo, resp.StatusCode)
-	}
-
-	defer resp.Body.Close()
-	var repository Repository
-	err = json.NewDecoder(resp.Body).Decode(&repository)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling JSON for repo %s: %w", repo, err)
-	}
-
-	licenseName := ""
-	if repository.License != nil {
-		licenseName = repository.License.Name
-	}
-
-	parentRepo := ""
-	if repository.IsFork && repository.Parent != nil {
-		parentRepo = repository.Parent.FullName
-	}
-
-	fmt.Fprintf(w, "%s\t%t\t%s\t%d\t%d\t%d\t%s\t%s\n",
-		repository.FullName,
-		repository.IsFork,
-		parentRepo,
-		repository.StargazersCount,
-		repository.WatchersCount,
-		repository.OpenIssuesCount,
-		licenseName,
-		repository.DefaultBranch,
-	)
-
-	return &repository, nil
-}
-
 func main() {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
@@ -112,32 +57,133 @@ func main() {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	re := regexp.MustCompile(`(?m)^\s*(\S+) v(\S+)`)
 	fmt.Println("Scanning go.mod file...")
 
+	w := writeHeader()
+
+	var wg sync.WaitGroup
+	repos := make(chan string)
+	repoInfo := make(chan *Repository)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		collectRepos(scanner, token, repos)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for r := range fetchRepoInfo(repos, token) {
+			repoInfo <- r
+		}
+		close(repoInfo)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		printRepos(repoInfo, w)
+	}()
+
+	wg.Wait()
+	w.Flush()
+}
+
+func writeHeader() *tabwriter.Writer {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight|tabwriter.Debug)
 	fmt.Fprintln(w, "Name\tIsFork\tParent Repo\tStargazers\tWatchers\tOpen Issues\tLicense\tDefault Branch")
+	return w
+}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		match := re.FindStringSubmatch(line)
-		if match != nil {
-			modulePath := match[1]
-			parts := strings.Split(modulePath, "/")
-			if len(parts) > 2 {
-				repo := fmt.Sprintf("%s/%s/%s", parts[0], parts[1], parts[2])
-				_, err := fetchRepoInfo(repo, token, w)
-				if err != nil {
-					fmt.Printf("Error fetching repo info: %v\n", err)
-					continue
+func collectRepos(scanner *bufio.Scanner, token string, repos chan<- string) {
+	go func() {
+		defer close(repos)
+
+		re := regexp.MustCompile(`(?m)^\s*(\S+) v(\S+)`)
+		for scanner.Scan() {
+			line := scanner.Text()
+			match := re.FindStringSubmatch(line)
+			if match != nil {
+				modulePath := match[1]
+				parts := strings.Split(modulePath, "/")
+				if len(parts) > 2 {
+					repo := fmt.Sprintf("%s/%s/%s", parts[0], parts[1], parts[2])
+					repos <- repo
 				}
 			}
 		}
-	}
+	}()
+}
 
-	w.Flush()
+func fetchRepoInfo(repos <-chan string, token string) <-chan *Repository {
+	out := make(chan *Repository)
+	go func() {
+		defer close(out)
+		for repo := range repos {
+			parts := strings.Split(repo, "/")
+			if len(parts) < 2 {
+				log.Printf("invalid repo format: %s", repo)
+				continue
+			}
 
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+			repo = fmt.Sprintf("%s/%s", parts[len(parts)-2], parts[len(parts)-1])
+
+			url := fmt.Sprintf("https://api.github.com/repos/%s", repo)
+			client := &http.Client{}
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				log.Printf("error creating request for repo %s: %v", repo, err)
+				continue
+			}
+
+			req.Header.Set("Authorization", "token "+token)
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("error making request for repo %s: %v", repo, err)
+				continue
+			}
+
+			if resp.StatusCode != 200 {
+				log.Printf("received non-200 response from GitHub API for repo %s: %d", repo, resp.StatusCode)
+				continue
+			}
+
+			defer resp.Body.Close()
+			var repository Repository
+			err = json.NewDecoder(resp.Body).Decode(&repository)
+			if err != nil {
+				log.Printf("error unmarshalling JSON for repo %s: %v", repo, err)
+				continue
+			}
+
+			out <- &repository
+		}
+	}()
+	return out
+}
+
+func printRepos(repos <-chan *Repository, w *tabwriter.Writer) {
+	for repo := range repos {
+		licenseName := ""
+		if repo.License != nil {
+			licenseName = repo.License.Name
+		}
+
+		parentRepo := ""
+		if repo.IsFork && repo.Parent != nil {
+			parentRepo = repo.Parent.FullName
+		}
+
+		fmt.Fprintf(w, "%s\t%t\t%s\t%d\t%d\t%d\t%s\t%s\n",
+			repo.FullName,
+			repo.IsFork,
+			parentRepo,
+			repo.StargazersCount,
+			repo.WatchersCount,
+			repo.OpenIssuesCount,
+			licenseName,
+			repo.DefaultBranch,
+		)
 	}
 }
