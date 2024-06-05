@@ -39,6 +39,57 @@ $ make install
 ```
 
 Once installed, you can run `depcheck` on the root folder of any Go module to analyze its dependencies.
+```sh
+$ depcheck
+```
+
+Or you can specify a sort flag:
+```sh
+$ depcheck -sort=stars
+```
+
+In that case, the usage instructions would be slightly different. The user would run the compiled executable directly, rather than using `go run`. Here's how you can update the instructions:
+
+```markdown
+## Usage
+
+Follow these steps to install and use `depcheck`:
+
+Clone the repository:
+```sh
+$ git clone https://github.com/adrianpk/depcheck.git
+```
+
+Navigate to the `depcheck` directory:
+```sh
+$ cd depcheck
+```
+
+Install the application:
+```sh
+$ make install
+```
+
+Once installed, you can run `depcheck` on the root folder of any Go module to analyze its dependencies:
+
+```sh
+$ depcheck
+```
+
+Or you can specify a sort flag:
+
+```sh
+$ depcheck -sort=stars
+```
+
+The available sort flags are:
+
+* `watchers`: Sorts the repositories by the number of watchers. This is the default sort flag.
+* `stars`: Sorts the repositories by the number of stars.
+* `forks`: Sorts the repositories by the number of forks.
+* `issues`: Sorts the repositories by the number of open issues.
+
+If no sort flag is passed, the application will sort the repositories by the number of watchers.
 
 **Prerequisite:** Before running the code, make sure to set the `GITHUB_TOKEN` environment variable to your GitHub personal access token. This is necessary for the code to authenticate with the GitHub API. You can generate a personal access token in your GitHub settings.
 
@@ -48,33 +99,27 @@ export GITHUB_TOKEN=your_github_token
 
 Replace `your_github_token` with your actual GitHub personal access token.
 
-## Future Enhancements
-
-While depcheck is functional at its current stage, we plan to continue polishing the tool and adding new features. Some of the enhancements we're considering include:
-
-- Adding the ability to order results by any column (e.g., number of stargazers, number of open issues, etc.)
-- Providing an option to exclude certain entries from the results
-
 ## Sample output
 ```markdown
 GitHub token found, proceeding...
 Scanning go.mod file...
                        Name|  IsFork|  Parent Repo|  Stargazers|  Watchers|  Open Issues|                                  License|Default Branch
-                spf13/afero|   false|             |        5752|      5752|          133|                       Apache License 2.0|master
-                spf13/cobra|   false|             |       36447|     36447|          274|                       Apache License 2.0|main
-                spf13/viper|   false|             |       26085|     26085|          499|                              MIT License|master
-           stretchr/testify|   false|             |       22304|     22304|          387|                              MIT License|master
-            davecgh/go-spew|   false|             |        5946|      5946|           63|                              ISC License|master
-          fsnotify/fsnotify|   false|             |        9250|      9250|           26|  BSD 3-Clause "New" or "Revised" License|main
-              hashicorp/hcl|   false|             |        5127|      5127|          208|               Mozilla Public License 2.0|main
-  inconshreveable/mousetrap|   false|             |         232|       232|            0|                       Apache License 2.0|master
-      magiconair/properties|   false|             |         321|       321|           23|        BSD 2-Clause "Simplified" License|main
-     mitchellh/mapstructure|   false|             |        7763|      7763|           82|                              MIT License|main
-          pelletier/go-toml|   false|             |        1661|      1661|           22|                                    Other|v2
-         pmezard/go-difflib|   false|             |         379|       379|            4|                                    Other|master
      sagikazarmark/locafero|   false|             |           4|         4|            1|                              MIT License|main
     sagikazarmark/slog-shim|   false|             |           7|         7|            1|  BSD 3-Clause "New" or "Revised" License|main
-           sourcegraph/conc|   false|             |        8562|      8562|           13|                              MIT License|main
-                 spf13/cast|   false|             |        3376|      3376|           89|                              MIT License|master
-                spf13/pflag|    true|  ogier/pflag|        2328|      2328|          178|  BSD 3-Clause "New" or "Revised" License|master
+  inconshreveable/mousetrap|   false|             |         232|       232|            0|                       Apache License 2.0|master
             subosito/gotenv|   false|             |         287|       287|            0|                              MIT License|master
+      magiconair/properties|   false|             |         321|       321|           23|        BSD 2-Clause "Simplified" License|main
+         pmezard/go-difflib|   false|             |         379|       379|            4|                                    Other|master
+          pelletier/go-toml|   false|             |        1661|      1661|           22|                                    Other|v2
+                spf13/pflag|    true|  ogier/pflag|        2328|      2328|          178|  BSD 3-Clause "New" or "Revised" License|master
+                 spf13/cast|   false|             |        3376|      3376|           89|                              MIT License|master
+              hashicorp/hcl|   false|             |        5127|      5127|          208|               Mozilla Public License 2.0|main
+                spf13/afero|   false|             |        5752|      5752|          133|                       Apache License 2.0|master
+            davecgh/go-spew|   false|             |        5946|      5946|           63|                              ISC License|master
+     mitchellh/mapstructure|   false|             |        7763|      7763|           82|                              MIT License|main
+           sourcegraph/conc|   false|             |        8562|      8562|           13|                              MIT License|main
+          fsnotify/fsnotify|   false|             |        9250|      9250|           26|  BSD 3-Clause "New" or "Revised" License|main
+           stretchr/testify|   false|             |       22304|     22304|          387|                              MIT License|master
+                spf13/viper|   false|             |       26085|     26085|          499|                              MIT License|master
+                spf13/cobra|   false|             |       36448|     36448|          274|                       Apache License 2.0|main
+```
