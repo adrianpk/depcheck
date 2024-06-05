@@ -50,7 +50,6 @@ $ depcheck -sort=stars
 
 In that case, the usage instructions would be slightly different. The user would run the compiled executable directly, rather than using `go run`. Here's how you can update the instructions:
 
-```markdown
 ## Usage
 
 Follow these steps to install and use `depcheck`:
