@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -68,7 +69,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		collectRepos(scanner, token, repos)
+		collectRepos(scanner, repos)
 	}()
 
 	wg.Add(1)
@@ -83,7 +84,8 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		printRepos(repoInfo, w)
+		repoList := sortRepos(repoInfo)
+		printRepos(repoList, w)
 	}()
 
 	wg.Wait()
@@ -96,7 +98,7 @@ func writeHeader() *tabwriter.Writer {
 	return w
 }
 
-func collectRepos(scanner *bufio.Scanner, token string, repos chan<- string) {
+func collectRepos(scanner *bufio.Scanner, repos chan<- string) {
 	go func() {
 		defer close(repos)
 
@@ -163,8 +165,21 @@ func fetchRepoInfo(repos <-chan string, token string) <-chan *Repository {
 	return out
 }
 
-func printRepos(repos <-chan *Repository, w *tabwriter.Writer) {
+func sortRepos(repos <-chan *Repository) []Repository {
+	var repoList []Repository
 	for repo := range repos {
+		repoList = append(repoList, *repo)
+	}
+
+	sort.Slice(repoList, func(i, j int) bool {
+		return repoList[i].WatchersCount < repoList[j].WatchersCount
+	})
+
+	return repoList
+}
+
+func printRepos(repos []Repository, w *tabwriter.Writer) {
+	for _, repo := range repos {
 		licenseName := ""
 		if repo.License != nil {
 			licenseName = repo.License.Name
